@@ -496,7 +496,9 @@ void mlebndfdlap_sig_adotx_rz (int i, int j, int k, Array4<Real> const& y,
             Real const sigxp = Real(0.5)*(sig(i,  j-1,k)+sig(i,  j,k));
             Real const sigxm = Real(0.5)*(sig(i-1,j-1,k)+sig(i-1,j,k));
             Ax += (sigxp*rp*(x(i+1,j,k)-x(i,j,k)) + sigxm*rm*(x(i-1,j,k)-x(i,j,k))) / (r*dr*dr);
-            Ax -= alpha/(r*r) * x(i,j,k);
+            // azimuthal-mode term of div(sigma grad phi): sigma at the node, r-weighted like the radial fluxes
+            Real const signode = (sigxp*rp + sigxm*rm) / (rp + rm);
+            Ax -= signode * alpha/(r*r) * x(i,j,k);
         }
         y(i,j,k) = Ax;
     }
@@ -529,8 +531,10 @@ void mlebndfdlap_sig_gsrb_rz (int i, int j, int k, Array4<Real> const& x,
                 Real const sigxm = Real(0.5)*(sig(i-1,j-1,k)+sig(i-1,j,k));
                 Ax += (sigxp*rp*(x(i+1,j,k)-x(i,j,k)) + sigxm*rm*(x(i-1,j,k)-x(i,j,k))) / (r*dr*dr);
                 gamma += -(sigxp*rp+sigxm*rm) / (r*dr*dr);
-                Ax -= alpha/(r*r) * x(i,j,k);
-                gamma -= alpha/(r*r);
+                // azimuthal-mode term of div(sigma grad phi): sigma at the node, r-weighted like the radial fluxes
+                Real const signode = (sigxp*rp + sigxm*rm) / (rp + rm);
+                Ax -= signode * alpha/(r*r) * x(i,j,k);
+                gamma -= signode * alpha/(r*r);
             }
             constexpr Real omega = Real(1.25);
             x(i,j,k) += (rhs(i,j,k) - Ax) * (omega / gamma);
@@ -706,7 +710,13 @@ void mlebndfdlap_sig_adotx_rz_eb_doit (int i, int j, int k, Array4<Real> const& 
         out += tmp * Real(2.0) / ((hpz+hmz) * dz * dz);
 
         if (r != Real(0.0)) {
-            out -= scale * alpha/(r*r) * x(i,j,k);
+            // azimuthal-mode term of div(sigma grad phi): sigma at the node, weighted by volume fraction and r
+            Real const wsig = vfrc(i-1,j-1,k)*rm + vfrc(i,j-1,k)*rp + vfrc(i-1,j,k)*rm + vfrc(i,j,k)*rp;
+            Real const signode = (wsig > Real(0.0))
+                ? (sig(i-1,j-1,k)*vfrc(i-1,j-1,k)*rm + sig(i,j-1,k)*vfrc(i,j-1,k)*rp
+                 + sig(i-1,j  ,k)*vfrc(i-1,j  ,k)*rm + sig(i,j  ,k)*vfrc(i,j  ,k)*rp) / wsig
+                : Real(1.0);
+            out -= scale * signode * alpha/(r*r) * x(i,j,k);
         }
 
         y(i,j,k) = out;
@@ -897,8 +907,14 @@ void mlebndfdlap_sig_gsrb_rz_eb (int i, int j, int k, Array4<Real> const& x,
             gamma += tmp0 * Real(2.0) / ((hpz+hmz) * dz * dz);
 
             if (r != Real(0.0)) {
-                Ax -= scale * alpha/(r*r) * x(i,j,k);
-                gamma -= scale * alpha/(r*r);
+                // azimuthal-mode term of div(sigma grad phi): sigma at the node, weighted by volume fraction and r
+                Real const wsig = vfrc(i-1,j-1,k)*rm + vfrc(i,j-1,k)*rp + vfrc(i-1,j,k)*rm + vfrc(i,j,k)*rp;
+                Real const signode = (wsig > Real(0.0))
+                    ? (sig(i-1,j-1,k)*vfrc(i-1,j-1,k)*rm + sig(i,j-1,k)*vfrc(i,j-1,k)*rp
+                     + sig(i-1,j  ,k)*vfrc(i-1,j  ,k)*rm + sig(i,j  ,k)*vfrc(i,j  ,k)*rp) / wsig
+                    : Real(1.0);
+                Ax -= scale * signode * alpha/(r*r) * x(i,j,k);
+                gamma -= scale * signode * alpha/(r*r);
             }
 
             constexpr Real omega = Real(1.25);
