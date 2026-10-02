@@ -1214,6 +1214,13 @@ namespace {
             return Real(1.0);
         }
 
+        //! sigma of the azimuthal (alpha/r^2) term at the node: 1, as in the constant-sigma kernels
+        [[nodiscard]] AMREX_GPU_DEVICE AMREX_FORCE_INLINE
+        static Real nodeSigma (int, int, int, Real)
+        {
+            return Real(1.0);
+        }
+
         Real sigr;
     };
 
@@ -1231,6 +1238,16 @@ namespace {
             Real const rp = r + Real(0.5)*dr;
             Real const rm = amrex::Math::abs(r-Real(0.5)*dr);
             return (sigma(i-1,j,k)*rm + sigma(i,j,k)*rp) / (rm+rp);
+        }
+
+        //! sigma of the azimuthal (alpha/r^2) term at the node, as in mlebndfdlap_sig_adotx_rz
+        [[nodiscard]] AMREX_GPU_DEVICE AMREX_FORCE_INLINE
+        Real nodeSigma (int i, int j, int k, Real r) const
+        {
+            Real const rp = r + Real(0.5)*dr;
+            Real const rm = amrex::Math::abs(r-Real(0.5)*dr);
+            return (Real(0.5)*(sigma(i,j-1,k)+sigma(i,j,k))*rp
+                  + Real(0.5)*(sigma(i-1,j-1,k)+sigma(i-1,j,k))*rm) / (rm+rp);
         }
 
         Array4<Real const> sigma;
@@ -1256,6 +1273,19 @@ namespace {
             Real const wm = vfrac(i-1,j,k)*rm;
             Real const wp = vfrac(i,j,k)*rp;
             return (sigma(i-1,j,k)*wm + sigma(i,j,k)*wp) / (wm+wp);
+        }
+
+        //! sigma of the azimuthal (alpha/r^2) term at the node, as in mlebndfdlap_sig_adotx_rz_eb
+        [[nodiscard]] AMREX_GPU_DEVICE AMREX_FORCE_INLINE
+        Real nodeSigma (int i, int j, int k, Real r) const
+        {
+            Real const rp = r + Real(0.5)*dr;
+            Real const rm = amrex::Math::abs(r-Real(0.5)*dr);
+            Real const w = vfrac(i-1,j-1,k)*rm + vfrac(i,j-1,k)*rp + vfrac(i-1,j,k)*rm + vfrac(i,j,k)*rp;
+            return (w > Real(0.0))
+                ? (sigma(i-1,j-1,k)*vfrac(i-1,j-1,k)*rm + sigma(i,j-1,k)*vfrac(i,j-1,k)*rp
+                 + sigma(i-1,j  ,k)*vfrac(i-1,j  ,k)*rm + sigma(i,j  ,k)*vfrac(i,j  ,k)*rp) / w
+                : Real(1.0);
         }
 
         Array4<Real const> sigma;
@@ -1376,7 +1406,8 @@ namespace {
             out += tmp*Real(2.0)/((hpz+hmz)*dz*dz);
 
             if (r != Real(0.0)) {
-                out -= scale*alpha*xc/(r*r);
+                // weighted by sigma at the node, consistent with the smoother and apply kernels
+                out -= scale*this->nodeSigma(i,j,k,r)*alpha*xc/(r*r);
             }
             return out;
         }
