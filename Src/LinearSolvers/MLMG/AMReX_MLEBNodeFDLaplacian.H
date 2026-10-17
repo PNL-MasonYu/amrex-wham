@@ -73,6 +73,14 @@ public:
 
     //! Provide conductivity as a cell-centered MultiFab on AMR level \p amrlev.
     void setSigma (int amrlev, MultiFab const& a_sigma);
+    /**
+     * \brief Provide an anisotropic conductivity (RZ only) as a cell-centered MultiFab with four
+     * components on AMR level \p amrlev: sigma_rr, sigma_rz, sigma_zz, sigma_thetatheta.
+     *
+     * The diagonal part acts on the r and z fluxes and sigma_thetatheta on the alpha/r^2 term
+     * (setAlpha); the rz cross term is not applied. Call after setRZ(true).
+     */
+    void setSigmaTensor (int amrlev, MultiFab const& a_sigma);
 
     //! Enable/disable RZ corrections (radial metrics).
     void setRZ (bool flag);
@@ -212,7 +220,9 @@ public:
         return BottomSolver::custom;
     }
 
-    [[nodiscard]] bool supportCustomBottomSolver () const override { return true; }
+    //! The custom GPU bottom solver applies a scalar sigma (component 0): with the tensor sigma (setSigmaTensor) it
+    //! would solve a different operator on the coarsest level, so MLMG falls back to its own BiCGStab there.
+    [[nodiscard]] bool supportCustomBottomSolver () const override { return m_sigma_ncomp != 4; }
 
     void customBottomSolve (MLMGT<MultiFab>* mlmg, MultiFab& x, const MultiFab& b,
                             Real eps_rel, Real eps_abs, int maxiter) override;
@@ -221,6 +231,7 @@ private:
     GpuArray<Real,AMREX_SPACEDIM> m_sigma{{AMREX_D_DECL(1_rt,1_rt,1_rt)}};
     Vector<Vector<std::unique_ptr<MultiFab>>> m_sigma_mf;
     bool m_has_sigma_mf = false;
+    int m_sigma_ncomp = 1;     //!< 1: scalar sigma; 4: the RZ tensor (rr, rz, zz, thetatheta)
     bool m_needs_update = true;
     Real m_s_phi_eb = std::numeric_limits<Real>::lowest();
     Vector<MultiFab> m_phi_eb;

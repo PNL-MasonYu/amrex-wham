@@ -51,10 +51,28 @@ MLEBNodeFDLaplacian::setSigma (int amrlev, MultiFab const& a_sigma)
 {
     m_needs_update = true;
     m_has_sigma_mf = true;
+    m_sigma_ncomp = 1;
     m_sigma_mf[amrlev][0] = std::make_unique<MultiFab>
         (this->m_grids[amrlev][0], this->m_dmap[amrlev][0], 1, 1, MFInfo{},
          *(this->m_factory[amrlev][0]));
     MultiFab::Copy(*m_sigma_mf[amrlev][0], a_sigma, 0, 0, 1, 0);
+#ifdef AMREX_USE_EB
+    amrex::EB_set_covered(*m_sigma_mf[amrlev][0], Real(0.0));
+#endif
+}
+
+void
+MLEBNodeFDLaplacian::setSigmaTensor (int amrlev, MultiFab const& a_sigma)
+{
+    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(AMREX_SPACEDIM == 2 && m_rz && a_sigma.nComp() == 4,
+        "MLEBNodeFDLaplacian::setSigmaTensor: RZ only (call setRZ(true) first), 4 components (rr, rz, zz, thetatheta)");
+    m_needs_update = true;
+    m_has_sigma_mf = true;
+    m_sigma_ncomp = 4;
+    m_sigma_mf[amrlev][0] = std::make_unique<MultiFab>
+        (this->m_grids[amrlev][0], this->m_dmap[amrlev][0], 4, 1, MFInfo{},
+         *(this->m_factory[amrlev][0]));
+    MultiFab::Copy(*m_sigma_mf[amrlev][0], a_sigma, 0, 0, 4, 0);
 #ifdef AMREX_USE_EB
     amrex::EB_set_covered(*m_sigma_mf[amrlev][0], Real(0.0));
 #endif
@@ -459,11 +477,19 @@ MLEBNodeFDLaplacian::Fapply (int amrlev, int mglev, MultiFab& out, const MultiFa
                     if (m_has_sigma_mf) {
                         auto const& sigarr = m_sigma_mf[amrlev][mglev]->const_array(mfi);
                         auto const& vfrc = factory->getVolFrac().const_array(mfi);
-                        AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
-                        {
-                            mlebndfdlap_sig_adotx_rz_eb(i,j,k,yarr,xarr,levset,dmarr,ecx,ecy,
-                                                        sigarr, vfrc, phiebarr, dx0, dx1, xlo, alpha);
-                        });
+                        if (m_sigma_ncomp == 4) {
+                            AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
+                            {
+                                mlebndfdlap_tsig_adotx_rz_eb(i,j,k,yarr,xarr,levset,dmarr,ecx,ecy,
+                                                             sigarr, vfrc, phiebarr, dx0, dx1, xlo, alpha);
+                            });
+                        } else {
+                            AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
+                            {
+                                mlebndfdlap_sig_adotx_rz_eb(i,j,k,yarr,xarr,levset,dmarr,ecx,ecy,
+                                                            sigarr, vfrc, phiebarr, dx0, dx1, xlo, alpha);
+                            });
+                        }
                     } else {
                         AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
                         {
@@ -494,11 +520,19 @@ MLEBNodeFDLaplacian::Fapply (int amrlev, int mglev, MultiFab& out, const MultiFa
                     if (m_has_sigma_mf) {
                         auto const& sigarr = m_sigma_mf[amrlev][mglev]->const_array(mfi);
                         auto const& vfrc = factory->getVolFrac().const_array(mfi);
-                        AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
-                        {
-                            mlebndfdlap_sig_adotx_rz_eb(i,j,k,yarr,xarr,levset,dmarr,ecx,ecy,
-                                                        sigarr, vfrc, phieb, dx0, dx1, xlo, alpha);
-                        });
+                        if (m_sigma_ncomp == 4) {
+                            AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
+                            {
+                                mlebndfdlap_tsig_adotx_rz_eb(i,j,k,yarr,xarr,levset,dmarr,ecx,ecy,
+                                                             sigarr, vfrc, phieb, dx0, dx1, xlo, alpha);
+                            });
+                        } else {
+                            AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
+                            {
+                                mlebndfdlap_sig_adotx_rz_eb(i,j,k,yarr,xarr,levset,dmarr,ecx,ecy,
+                                                            sigarr, vfrc, phieb, dx0, dx1, xlo, alpha);
+                            });
+                        }
                     } else {
                         AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
                         {
@@ -531,10 +565,17 @@ MLEBNodeFDLaplacian::Fapply (int amrlev, int mglev, MultiFab& out, const MultiFa
             if (m_rz) {
                 if (m_has_sigma_mf) {
                     auto const& sigarr = m_sigma_mf[amrlev][mglev]->const_array(mfi);
-                    AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
-                    {
-                        mlebndfdlap_sig_adotx_rz(i,j,k,yarr,xarr,dmarr,sigarr,dx0,dx1,xlo,alpha);
-                    });
+                    if (m_sigma_ncomp == 4) {
+                        AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
+                        {
+                            mlebndfdlap_tsig_adotx_rz(i,j,k,yarr,xarr,dmarr,sigarr,dx0,dx1,xlo,alpha);
+                        });
+                    } else {
+                        AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
+                        {
+                            mlebndfdlap_sig_adotx_rz(i,j,k,yarr,xarr,dmarr,sigarr,dx0,dx1,xlo,alpha);
+                        });
+                    }
                 } else {
                     AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
                     {
@@ -612,11 +653,19 @@ MLEBNodeFDLaplacian::Fsmooth (int amrlev, int mglev, MultiFab& sol, const MultiF
                     if (m_has_sigma_mf) {
                         auto const& sigarr = m_sigma_mf[amrlev][mglev]->const_array(mfi);
                         auto const& vfrc = factory->getVolFrac().const_array(mfi);
-                        AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
-                        {
-                            mlebndfdlap_sig_gsrb_rz_eb(i,j,k,solarr,rhsarr,levset,dmskarr,ecx,ecy,
-                                                       sigarr, vfrc, dx0, dx1, xlo, redblack, alpha);
-                        });
+                        if (m_sigma_ncomp == 4) {
+                            AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
+                            {
+                                mlebndfdlap_tsig_gsrb_rz_eb(i,j,k,solarr,rhsarr,levset,dmskarr,ecx,ecy,
+                                                            sigarr, vfrc, dx0, dx1, xlo, redblack, alpha);
+                            });
+                        } else {
+                            AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
+                            {
+                                mlebndfdlap_sig_gsrb_rz_eb(i,j,k,solarr,rhsarr,levset,dmskarr,ecx,ecy,
+                                                           sigarr, vfrc, dx0, dx1, xlo, redblack, alpha);
+                            });
+                        }
                     } else {
                         AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
                         {
@@ -648,11 +697,19 @@ MLEBNodeFDLaplacian::Fsmooth (int amrlev, int mglev, MultiFab& sol, const MultiF
                 if (m_rz) {
                     if (m_has_sigma_mf) {
                         auto const& sigarr = m_sigma_mf[amrlev][mglev]->const_array(mfi);
-                        AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
-                        {
-                            mlebndfdlap_sig_gsrb_rz(i,j,k,solarr,rhsarr,dmskarr,sigarr,
-                                                    dx0, dx1, xlo, redblack, alpha);
-                        });
+                        if (m_sigma_ncomp == 4) {
+                            AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
+                            {
+                                mlebndfdlap_tsig_gsrb_rz(i,j,k,solarr,rhsarr,dmskarr,sigarr,
+                                                         dx0, dx1, xlo, redblack, alpha);
+                            });
+                        } else {
+                            AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
+                            {
+                                mlebndfdlap_sig_gsrb_rz(i,j,k,solarr,rhsarr,dmskarr,sigarr,
+                                                        dx0, dx1, xlo, redblack, alpha);
+                            });
+                        }
                     } else {
                         AMREX_HOST_DEVICE_FOR_3D(box, i, j, k,
                         {
@@ -1018,9 +1075,9 @@ MLEBNodeFDLaplacian::update_sigma ()
     AMREX_ALWAYS_ASSERT(this->m_num_amr_levels == 1);
     for (int amrlev = 0; amrlev < this->m_num_amr_levels; ++amrlev) {
         for (int mglev = 1; mglev < this->m_num_mg_levels[amrlev]; ++mglev) {
-            if (m_sigma_mf[amrlev][mglev] == nullptr) {
+            if (m_sigma_mf[amrlev][mglev] == nullptr || m_sigma_mf[amrlev][mglev]->nComp() != m_sigma_ncomp) {
                 m_sigma_mf[amrlev][mglev] = std::make_unique<MultiFab>
-                    (this->m_grids[amrlev][mglev], this->m_dmap[amrlev][mglev], 1, 1,
+                    (this->m_grids[amrlev][mglev], this->m_dmap[amrlev][mglev], m_sigma_ncomp, 1,
                      MFInfo{}, *(this->m_factory[amrlev][mglev]));
             }
             IntVect const ratio = (amrlev > 0) ? IntVect (2)
@@ -1031,7 +1088,7 @@ MLEBNodeFDLaplacian::update_sigma ()
             amrex::average_down
 #endif
                 (*m_sigma_mf[amrlev][mglev-1],
-                 *m_sigma_mf[amrlev][mglev], 0, 1, ratio);
+                 *m_sigma_mf[amrlev][mglev], 0, m_sigma_ncomp, ratio);
         }
 
         for (int mglev = 0; mglev < this->m_num_mg_levels[amrlev]; ++mglev) {
@@ -1050,8 +1107,10 @@ MLEBNodeFDLaplacian::update_sigma ()
 #endif
             for (MFIter mfi(sigma, mfi_info); mfi.isValid(); ++mfi)
             {
-                Array4<Real> const& sfab = sigma.array(mfi);
-                mlndlap_fillbc_cc<Real>(mfi.validbox(),sfab,domain,lobc,hibc);
+                for (int n = 0; n < m_sigma_ncomp; ++n) {
+                    Array4<Real> const& sfab = sigma.array(mfi, n);
+                    mlndlap_fillbc_cc<Real>(mfi.validbox(),sfab,domain,lobc,hibc);
+                }
             }
         }
     }
